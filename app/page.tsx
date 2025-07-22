@@ -1,17 +1,17 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Cpu, Zap, Activity, ZoomIn, ZoomOut, RotateCcw } from "lucide-react"
+import { Cpu, Zap, Activity, ZoomIn, ZoomOut, RotateCcw, Database, Play } from "lucide-react"
 import { QuantumDevice } from "@/lib/quantum-device"
-import { QuantumSimulator } from "@/lib/quantum-simulator"
+import { HardwareQuantumSimulator } from "@/lib/hardware-quantum-simulator"
 import { GameManager } from "@/lib/game-state"
-import { QuantumGame } from "@/components/quantum-game"
+import type { DataFileInfo } from "@/lib/data-loader"
 
-// Complete device data with CORRECTED positions based on actual layouts
+// Device data configuration
 const deviceData = {
   ibmqx4: {
     num: 5,
@@ -539,7 +539,7 @@ const deviceData = {
     },
     sdk: "ManualQISKit",
     description: "IBM Kyiv",
-    example: Array.from({ length: 127 }, () => 0.25),
+    example: Array.from({ length: 133 }, () => 0.25),
   },
   ibm_torino: {
     num: 133,
@@ -852,14 +852,50 @@ export default function QuantumCouplingVisualizer() {
     }>
   >([])
 
+  const [useRealHardware, setUseRealHardware] = useState(false)
+  const [dataAvailable, setDataAvailable] = useState<{
+    realData: boolean
+    simulatedData: boolean
+    availableFiles: DataFileInfo[]
+  }>({
+    realData: false,
+    simulatedData: false,
+    availableFiles: [],
+  })
+
+  const [selectedDataFile, setSelectedDataFile] = useState<DataFileInfo | null>(null)
+
   const device = useMemo(() => {
     const config = deviceData[selectedDevice as keyof typeof deviceData]
     return new QuantumDevice(config)
   }, [selectedDevice])
 
-  const simulator = useMemo(() => new QuantumSimulator(device), [device])
+  const simulator = useMemo(() => new HardwareQuantumSimulator(device), [device])
 
-  const handleStartGame = () => {
+  useEffect(() => {
+    const checkDataAvailability = async () => {
+      const availability = await HardwareQuantumSimulator.getDeviceDataInfo(device.name)
+      setDataAvailable({
+        realData: availability.realData,
+        simulatedData: availability.simulatedData,
+        availableFiles: availability.availableFiles || [],
+      })
+
+      if (availability.availableFiles && availability.availableFiles.length > 0) {
+        setSelectedDataFile(availability.availableFiles[0])
+      }
+    }
+
+    checkDataAvailability()
+  }, [device.name])
+
+  const handleStartGame = async () => {
+    const initialized = await simulator.initialize(useRealHardware, selectedDataFile || undefined)
+    if (!initialized && useRealHardware) {
+      setUseRealHardware(false)
+      await simulator.initialize(false)
+    }
+
     const puzzle = simulator.generateNewPuzzle()
     gameManager.startGame(puzzle)
     setGameState(gameManager.getState())
@@ -869,20 +905,19 @@ export default function QuantumCouplingVisualizer() {
     const result = gameManager.makeGuess(pairName)
     setGameState(gameManager.getState())
 
-    // Handle round completion
     if (result.roundComplete && result.roundResult) {
-      // Show round results briefly, then move to next round
       setTimeout(() => {
         if (!result.roundResult!.isGameComplete) {
-          // Generate new puzzle for next round
           const puzzle = simulator.generateNewPuzzle()
-          gameManager.nextRound(puzzle)
-          setGameState(gameManager.getState())
+          const canContinue = gameManager.nextRound(puzzle)
+          if (canContinue) {
+            setGameState(gameManager.getState())
+          }
+        } else {
+          // Game is complete
+          handleGameComplete(gameManager.getState())
         }
-      }, 2000) // Wait 2 seconds before moving to next round
-    }
-    if (result.roundResult?.isGameComplete) {
-      handleGameComplete(gameManager.getState())
+      }, 2000)
     }
   }
 
@@ -927,28 +962,28 @@ export default function QuantumCouplingVisualizer() {
     const minY = Math.min(...positions.map((pos) => pos[1]))
     const maxYActual = Math.max(...positions.map((pos) => pos[1]))
 
-    // Adaptive scaling based on device size
     const deviceWidth = maxXActual - minX
     const deviceHeight = maxYActual - minY
     const deviceSize = Math.max(deviceWidth, deviceHeight)
 
     let baseScale = 60
     if (deviceSize < 3) {
-      baseScale = 120 // Much larger for small devices like IBM QX4
+      baseScale = 120
     } else if (deviceSize < 8) {
-      baseScale = 80 // Medium for mid-size devices
+      baseScale = 80
     }
 
     const scale = baseScale * zoomLevel
     const padding = 80
 
-    // Calculate content size based on scaled positions
     const contentWidth = deviceWidth * scale + padding * 2
     const contentHeight = deviceHeight * scale + padding * 2
 
-    // Canvas size matches content size
-    const canvasWidth = Math.max(800, contentWidth)
-    const canvasHeight = Math.max(600, contentHeight)
+    const maxContainerWidth = 1200
+    const maxContainerHeight = 800
+
+    const containerWidth = Math.min(maxContainerWidth, Math.max(800, contentWidth))
+    const containerHeight = Math.min(maxContainerHeight, Math.max(600, contentHeight))
 
     return (
       <div className="w-full">
@@ -965,16 +1000,22 @@ export default function QuantumCouplingVisualizer() {
           <span className="text-sm text-gray-600 min-w-[60px]">{Math.round(zoomLevel * 100)}%</span>
         </div>
 
-        <div className="border rounded-lg bg-white overflow-auto" style={{ width: canvasWidth, height: canvasHeight }}>
+        <div
+          className="border rounded-lg bg-white overflow-auto"
+          style={{
+            width: containerWidth,
+            height: containerHeight,
+            maxWidth: maxContainerWidth,
+            maxHeight: maxContainerHeight,
+          }}
+        >
           <svg width={contentWidth} height={contentHeight} className="block">
-            {/* Render connections first (behind qubits) */}
             {Object.entries(device.pairs).map(([pairName, [q1, q2]]) => {
               const pos1 = device.getPosition(q1)
               const pos2 = device.getPosition(q2)
 
               if (!pos1 || !pos2) return null
 
-              // Scale positions but keep element sizes constant
               const x1 = (pos1[0] - minX) * scale + padding
               const y1 = (maxYActual - pos1[1]) * scale + padding
               const x2 = (pos2[0] - minX) * scale + padding
@@ -986,14 +1027,12 @@ export default function QuantumCouplingVisualizer() {
               const isPairGuessed = gameState.guessedPairs.includes(pairName)
               const isPairCorrect = gameState.algorithmSolution.includes(pairName)
 
-              // Determine edge color based on game state
-              let strokeColor = "#6b7280" // Default gray
-              let strokeWidth = "4" // Fixed thickness
+              let strokeColor = "#6b7280"
+              let strokeWidth = "4"
 
               if (gameState.isGameActive && isPairGuessed) {
-                // Show immediate feedback: green if correct, red if incorrect
                 strokeColor = isPairCorrect ? "#10b981" : "#ef4444"
-                strokeWidth = "5" // Fixed thickness
+                strokeWidth = "5"
               }
 
               return (
@@ -1009,16 +1048,13 @@ export default function QuantumCouplingVisualizer() {
                     onClick={() => {
                       if (gameState.isGameActive && !gameState.roundComplete) {
                         if (isPairGuessed) {
-                          // Allow deselecting any guessed pair
                           handleDeselectPair(pairName)
                         } else {
-                          // Select new pairs
                           handleMakeGuess(pairName)
                         }
                       }
                     }}
                   />
-                  {/* Pair label in black circle - fixed size */}
                   <circle
                     cx={midX}
                     cy={midY}
@@ -1030,10 +1066,8 @@ export default function QuantumCouplingVisualizer() {
                     onClick={() => {
                       if (gameState.isGameActive && !gameState.roundComplete) {
                         if (isPairGuessed) {
-                          // Allow deselecting any guessed pair
                           handleDeselectPair(pairName)
                         } else {
-                          // Select new pairs
                           handleMakeGuess(pairName)
                         }
                       }
@@ -1048,10 +1082,8 @@ export default function QuantumCouplingVisualizer() {
                     onClick={() => {
                       if (gameState.isGameActive) {
                         if (isPairGuessed && !isPairCorrect) {
-                          // Allow deselecting wrong pairs
                           handleDeselectPair(pairName)
                         } else if (!isPairGuessed) {
-                          // Select new pairs
                           handleMakeGuess(pairName)
                         }
                       }
@@ -1063,16 +1095,13 @@ export default function QuantumCouplingVisualizer() {
               )
             })}
 
-            {/* Render qubits - smaller fixed size */}
             {Array.from({ length: device.qubitCount }, (_, i) => i).map((qubitId) => {
               const pos = device.getPosition(qubitId)
               if (!pos) return null
 
-              // Scale positions but keep element sizes constant
               const x = (pos[0] - minX) * scale + padding
               const y = (maxYActual - pos[1]) * scale + padding
 
-              // Get the percentage value for this qubit
               const qubitValue =
                 gameState.isGameActive && gameState.oneProb.length > 0
                   ? gameState.oneProb[qubitId]
@@ -1101,18 +1130,11 @@ export default function QuantumCouplingVisualizer() {
     )
   }
 
-  const enhancedGameState = {
-    ...gameState,
-    gameData: gameState.oneProb,
-    correctPairs: gameState.algorithmSolution,
-    score: gameState.roundScore,
-  }
-
   const handleDeviceChange = (newDevice: string) => {
     setSelectedDevice(newDevice)
-    // Reset game when switching devices
     gameManager.resetGame()
     setGameState(gameManager.getState())
+    setSelectedDataFile(null)
   }
 
   return (
@@ -1152,7 +1174,6 @@ export default function QuantumCouplingVisualizer() {
                     </Badge>
                   </div>
 
-                  {/* Game History */}
                   {gameHistory.length > 0 && (
                     <div className="bg-gray-50 p-4 rounded-lg">
                       <h4 className="font-semibold mb-2">Game Records</h4>
@@ -1174,14 +1195,134 @@ export default function QuantumCouplingVisualizer() {
                 </div>
 
                 <div className="flex-1">
-                  <QuantumGame
-                    device={device}
-                    gameState={enhancedGameState}
-                    onStartGame={handleStartGame}
-                    onMakeGuess={handleMakeGuess}
-                    onResetGame={handleResetGame}
-                    onGameComplete={handleGameComplete}
-                  />
+                  <div className="space-y-4 p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-4">
+                      <span className="font-medium">Data Source:</span>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          id="simulated"
+                          name="dataSource"
+                          checked={!useRealHardware}
+                          onChange={() => setUseRealHardware(false)}
+                          className="mr-1"
+                        />
+                        <label htmlFor="simulated" className="text-sm">
+                          Simulated
+                        </label>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          id="hardware"
+                          name="dataSource"
+                          checked={useRealHardware}
+                          onChange={() => setUseRealHardware(true)}
+                          disabled={!dataAvailable.realData && dataAvailable.availableFiles.length === 0}
+                          className="mr-1"
+                        />
+                        <label
+                          htmlFor="hardware"
+                          className={`text-sm ${!dataAvailable.realData && dataAvailable.availableFiles.length === 0 ? "text-gray-400" : ""}`}
+                        >
+                          Real Hardware{" "}
+                          {!dataAvailable.realData && dataAvailable.availableFiles.length === 0 && "(Not Available)"}
+                        </label>
+                      </div>
+                    </div>
+
+                    {/* Show available data files with sample data */}
+                    {dataAvailable.availableFiles.length > 0 && useRealHardware && (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-4">
+                          <span className="font-medium flex items-center gap-1">
+                            <Database className="h-4 w-4" />
+                            Available Data:
+                          </span>
+                        </div>
+                        <Select
+                          value={selectedDataFile?.displayName || ""}
+                          onValueChange={(value) => {
+                            const file = dataAvailable.availableFiles.find((f) => f.displayName === value)
+                            setSelectedDataFile(file || null)
+                          }}
+                        >
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Select data file" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {dataAvailable.availableFiles.map((file, index) => (
+                              <SelectItem key={index} value={file.displayName}>
+                                {file.displayName}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+
+                        {selectedDataFile && (
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                            Using: {selectedDataFile.displayName}
+                          </Badge>
+                        )}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Simplified game interface - just Start Game button */}
+                  <div className="mt-4">
+                    {!gameState.isGameActive ? (
+                      <div className="text-center space-y-4">
+                        <p className="text-gray-600">
+                          Find the entangled qubit pairs! Click on the connection lines (edges) to make your guesses.
+                        </p>
+                        <p className="text-sm text-gray-500">
+                          Qubits with similar values are likely to be paired. You can deselect wrong guesses and keep
+                          trying!
+                        </p>
+                        <Button onClick={handleStartGame} className="flex items-center gap-2">
+                          <Play className="h-4 w-4" />
+                          Start Game
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 p-4 bg-white rounded-lg border">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">
+                              Round {gameState.round}
+                            </Badge>
+                            <Badge className="flex items-center gap-1 text-xs">
+                              Score: {gameState.roundScore}/{gameState.algorithmSolution.length}
+                            </Badge>
+                          </div>
+                          <Button onClick={handleResetGame} variant="outline" size="sm">
+                            Reset Game
+                          </Button>
+                        </div>
+
+                        <div className="text-sm text-gray-600">
+                          <p>
+                            <strong>Instructions:</strong> Click on the connection lines (edges) in the visualization to
+                            make your guesses.
+                          </p>
+                          <p>Paired qubits should have similar values. Click wrong guesses again to deselect them!</p>
+                        </div>
+
+                        {gameState.guessedPairs.length === gameState.algorithmSolution.length && (
+                          <div className="text-center p-4 bg-blue-50 rounded-lg">
+                            <h3 className="font-bold text-lg">Round Complete!</h3>
+                            <p>
+                              Score: {gameState.roundScore}/{gameState.algorithmSolution.length}
+                            </p>
+                            <p className="text-sm text-gray-600 mt-2">
+                              Accuracy: {((gameState.roundScore / gameState.algorithmSolution.length) * 100).toFixed(1)}
+                              %
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
 
