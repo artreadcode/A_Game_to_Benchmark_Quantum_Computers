@@ -1000,42 +1000,7 @@ export default function QuantumCouplingVisualizer() {
                       }
                     }}
                   />
-                  <circle
-                    cx={midX}
-                    cy={midY}
-                    r="15"
-                    fill={gameState.isGameActive && isPairGuessed ? (isPairCorrect ? "#10b981" : "#ef4444") : "black"}
-                    stroke="white"
-                    strokeWidth="2"
-                    className={gameState.isGameActive ? "cursor-pointer" : ""}
-                    onClick={() => {
-                      if (gameState.isGameActive && !gameState.roundComplete) {
-                        if (isPairGuessed) {
-                          handleDeselectPair(pairName)
-                        } else {
-                          handleMakeGuess(pairName)
-                        }
-                      }
-                    }}
-                  />
-                  <text
-                    x={midX}
-                    y={midY}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    className={`font-bold fill-white text-xs ${gameState.isGameActive && !isPairGuessed ? "cursor-pointer" : ""}`}
-                    onClick={() => {
-                      if (gameState.isGameActive) {
-                        if (isPairGuessed && !isPairCorrect) {
-                          handleDeselectPair(pairName)
-                        } else if (!isPairGuessed) {
-                          handleMakeGuess(pairName)
-                        }
-                      }
-                    }}
-                  >
-                    {pairName}
-                  </text>
+                  
                 </g>
               )
             })}
@@ -1053,19 +1018,18 @@ export default function QuantumCouplingVisualizer() {
                   : device.getQubitValue(qubitId)
 
               const percentage = qubitValue !== null ? (qubitValue * 100).toFixed(0) : "N/A"
+              
+              const qubitColour = qubitValue !== null ? Math.max(0, Math.min(1, qubitValue)) : 0;
 
+              // Red: #ef444 (239, 68, 68), Blue: #3b82f6 (59, 130, 246)
+              const R = Math.round(239 + (59 - 239) * qubitColour);
+              const B = Math.round(68 + (246 - 68) * qubitColour);
+              const G = Math.round(68 + (130 - 68) * qubitColour);
+        
               return (
                 <g key={qubitId}>
-                  <circle cx={x} cy={y} r="18" fill="#3b82f6" stroke="#1e40af" strokeWidth="2" />
-                  <text
-                    x={x}
-                    y={y}
-                    textAnchor="middle"
-                    dominantBaseline="central"
-                    className="font-bold fill-white text-xs"
-                  >
-                    {percentage}
-                  </text>
+                  <circle cx={x} cy={y} r="18" fill={`rgb(${R},${G},${B})`} />
+  
                 </g>
               )
             })}
@@ -1218,11 +1182,10 @@ export default function QuantumCouplingVisualizer() {
                     {!gameState.isGameActive ? (
                       <div className="text-center space-y-4">
                         <p className="text-gray-600">
-                          Find the entangled qubit pairs! Click on the connection lines (edges) to make your guesses.
+                          Find the entangled qubit pairs! Click on the edges to make your guesses.
                         </p>
                         <p className="text-sm text-gray-500">
-                          Qubits with similar values are likely to be paired. You can deselect wrong guesses and keep
-                          trying!
+                          Qubits with similar values are likely to have similar colours.
                         </p>
                         <Button onClick={handleStartGame} className="flex items-center gap-2">
                           <Play className="h-4 w-4" />
@@ -1247,10 +1210,9 @@ export default function QuantumCouplingVisualizer() {
 
                         <div className="text-sm text-gray-600">
                           <p>
-                            <strong>Instructions:</strong> Click on the connection lines (edges) in the visualization to
-                            make your guesses.
+                            <strong>Instructions:</strong> Click on the edges to make your guesses.
                           </p>
-                          <p>Paired qubits should have similar values. Click wrong guesses again to deselect them!</p>
+                          <p>Paired qubits should have similar colours.</p>
                         </div>
 
                         {gameState.guessedPairs.length === gameState.algorithmSolution.length && (
