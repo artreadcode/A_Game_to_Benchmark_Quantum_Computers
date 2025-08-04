@@ -114,8 +114,8 @@ export class HardwareDataLoader {
       console.error(`Error during file discovery:`, error)
     }
 
-    console.log(`Final discovered files: ${files.length}`)
-    console.log(`=== END FILE DISCOVERY ===`)
+    // console.log(`Final discovered files: ${files.length}`)
+    // console.log(`=== END FILE DISCOVERY ===`)
 
     this.availableFiles.set(cacheKey, files)
     return files

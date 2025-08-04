@@ -7,8 +7,7 @@ const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "Quantum Awesomeness",
-  description: "Quantum Device Coupling Visualizer",
-    generator: 'v0.dev'
+  description: "Benchmarking quantum computers with puzzle game"
 }
 
 export default function RootLayout({

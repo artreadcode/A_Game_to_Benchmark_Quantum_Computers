@@ -1000,7 +1000,6 @@ export default function QuantumCouplingVisualizer() {
                       }
                     }}
                   />
-                  
                 </g>
               )
             })}
@@ -1016,6 +1015,8 @@ export default function QuantumCouplingVisualizer() {
                 gameState.isGameActive && gameState.oneProb.length > 0
                   ? gameState.oneProb[qubitId]
                   : device.getQubitValue(qubitId)
+              
+              // console.log(gameState.oneProb)
 
               const percentage = qubitValue !== null ? (qubitValue * 100).toFixed(0) : "N/A"
               
@@ -1025,11 +1026,12 @@ export default function QuantumCouplingVisualizer() {
               const R = Math.round(239 + (59 - 239) * qubitColour);
               const B = Math.round(68 + (246 - 68) * qubitColour);
               const G = Math.round(68 + (130 - 68) * qubitColour);
+
+              // console.log(gameState.dataType);
         
               return (
                 <g key={qubitId}>
                   <circle cx={x} cy={y} r="18" fill={`rgb(${R},${G},${B})`} />
-  
                 </g>
               )
             })}
@@ -1199,9 +1201,7 @@ export default function QuantumCouplingVisualizer() {
                             <Badge variant="outline" className="text-xs">
                               Round {gameState.round}
                             </Badge>
-                            <Badge className="flex items-center gap-1 text-xs">
-                              Score: {gameState.roundScore}/{gameState.algorithmSolution.length}
-                            </Badge>
+                            
                           </div>
                           <Button onClick={handleResetGame} variant="outline" size="sm">
                             Reset Game
@@ -1218,13 +1218,7 @@ export default function QuantumCouplingVisualizer() {
                         {gameState.guessedPairs.length === gameState.algorithmSolution.length && (
                           <div className="text-center p-4 bg-blue-50 rounded-lg">
                             <h3 className="font-bold text-lg">Round Complete!</h3>
-                            <p>
-                              Score: {gameState.roundScore}/{gameState.algorithmSolution.length}
-                            </p>
-                            <p className="text-sm text-gray-600 mt-2">
-                              Accuracy: {((gameState.roundScore / gameState.algorithmSolution.length) * 100).toFixed(1)}
-                              %
-                            </p>
+                            <p>If you reply all answers correctly, the puzzle will move onto the next round.</p>
                           </div>
                         )}
                       </div>

@@ -94,13 +94,7 @@ export function QuantumGame({
 
               {gameState.guessedPairs.length === gameState.correctPairs.length && (
                 <div className="text-center p-4 bg-blue-50 rounded-lg">
-                  <h3 className="font-bold text-lg">Round Complete!</h3>
-                  <p>
-                    Score: {gameState.score}/{gameState.correctPairs.length}
-                  </p>
-                  <p className="text-sm text-gray-600 mt-2">
-                    Accuracy: {((gameState.score / gameState.correctPairs.length) * 100).toFixed(1)}%
-                  </p>
+                  <h3 className="font-bold text-lg">Round finished!</h3>
                 </div>
               )}
             </div>
