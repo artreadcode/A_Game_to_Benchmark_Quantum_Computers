@@ -1,1 +1,3 @@
 node_modules
+.next
+.ipynb_checkpoints
