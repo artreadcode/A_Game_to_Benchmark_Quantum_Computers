@@ -42,27 +42,34 @@ export class HardwareDataLoader {
     try {
       const baseUrl = `/data/${deviceName}`
       const fileUrl = `${baseUrl}/${selectedFile.fileName}`
-
-      const data = await this.loadDataFile(fileUrl)
-      if (!data) {
+      
+      const rawData = await this.loadDataFile(fileUrl)
+      if (!rawData) {
         return null
+      }
+
+      let normalizedData = rawData;
+      if (rawData.length > 0 && !Array.isArray(rawData[0])) {
+        normalizedData = [rawData];
+        console.log("Old data format detected. Normalizing data structure.");
       }
 
       const dataSet: HardwareDataSet = {
         device: deviceName,
         shots: selectedFile.metadata.shots || 8192,
-        isSimulated: selectedFile.metadata.simulated || false,
+        // --- MODIFIED: This now forces the program to ignore the 'sim=' flag ---
+        // It will always use the reliable 'sim=False' processing path.
+        isSimulated: false,
         move: selectedFile.metadata.move || "Unknown",
         displayName: selectedFile.displayName,
         fileType: selectedFile.fileType,
         sampleData: selectedFile.sampleData,
       }
 
-      // Handle different file types
       if (selectedFile.fileType === "oneProbs") {
-        dataSet.oneProbs = data
+        dataSet.oneProbs = normalizedData
       } else if (selectedFile.fileType === "sameProbs") {
-        dataSet.sameProbs = data
+        dataSet.sameProbs = normalizedData
       }
 
       this.dataCache.set(cacheKey, dataSet)
@@ -81,41 +88,24 @@ export class HardwareDataLoader {
 
     const files: DataFileInfo[] = []
 
-    console.log(`=== DISCOVERING FILES FOR ${deviceName} ===`)
-
     try {
-      // Use API route to get file list
       const apiUrl = `/api/data/${deviceName}`
-      console.log(`Fetching file list from: ${apiUrl}`)
-
       const response = await fetch(apiUrl)
-      console.log(`API response status: ${response.status}`)
 
       if (response.ok) {
         const data = await response.json()
-        console.log(`API response data:`, data)
-
         const txtFiles = data.files || []
-        console.log(`Found files:`, txtFiles)
 
-        // Create file info for each file
         for (const fileName of txtFiles) {
-          console.log(`Processing file: ${fileName}`)
           const fileInfo = await this.createFileInfo(`/data/${deviceName}`, fileName)
           if (fileInfo) {
             files.push(fileInfo)
-            console.log(`Added file: ${fileName}`)
           }
         }
-      } else {
-        console.log(`API request failed with status: ${response.status}`)
       }
     } catch (error) {
       console.error(`Error during file discovery:`, error)
     }
-
-    // console.log(`Final discovered files: ${files.length}`)
-    // console.log(`=== END FILE DISCOVERY ===`)
 
     this.availableFiles.set(cacheKey, files)
     return files
@@ -132,8 +122,7 @@ export class HardwareDataLoader {
         fileType: fileType,
         metadata: metadata,
       }
-
-      // Load sample data for better display name
+      
       try {
         const sampleData = await this.loadSampleDataForFile(baseUrl, fileName, fileType)
         if (sampleData) {
@@ -176,12 +165,12 @@ export class HardwareDataLoader {
       const data = JSON.parse(
         firstLine.replace(/'/g, '"').replace(/True/g, "true").replace(/False/g, "false").replace(/None/g, "null"),
       )
+      
+      const firstExperiment = Array.isArray(data) && data[0] ? data[0] : data
 
       if (fileType === "oneProbs") {
-        const firstExperiment = Array.isArray(data) && Array.isArray(data[0]) ? data[0] : data
-        return { oneProbs: firstExperiment }
+         return { oneProbs: Array.isArray(firstExperiment) ? firstExperiment : data }
       } else if (fileType === "sameProbs") {
-        const firstExperiment = Array.isArray(data) && data[0] ? data[0] : data
         return { sameProbs: firstExperiment }
       }
 

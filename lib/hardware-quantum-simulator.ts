@@ -64,11 +64,7 @@ export class HardwareQuantumSimulator {
   }
 
   generateNewPuzzle(): HardwarePuzzleResult {
-    if (this.useRealHardware && this.hardwareData) {
-      return this.generateHardwarePuzzle()
-    } else {
-      return this.generateSimulatedPuzzle()
-    }
+    return this.generateHardwarePuzzle()
   }
 
   private generateHardwarePuzzle(): HardwarePuzzleResult {
@@ -82,12 +78,10 @@ export class HardwareQuantumSimulator {
     let benchmarkInfo: any = undefined
 
     if (this.hardwareData.fileType === "oneProbs") {
-      // Handle oneProbs data (existing logic)
       processedOneProb = this.processOneProbsData()
       pairSimilarities = MatchingAlgorithm.calculateAllSimilarities(this.device.pairs, processedOneProb)
       algorithmSolution = MatchingAlgorithm.getDisjointPairs(this.device.pairs, processedOneProb, {})
     } else if (this.hardwareData.fileType === "sameProbs") {
-      // NEW: Simple approach for sameProbs data
       const result = this.processSameProbsSimple()
       processedOneProb = result.oneProb
       pairSimilarities = result.pairSimilarities
@@ -134,27 +128,24 @@ export class HardwareQuantumSimulator {
     console.log(`=== SAMEPROBS SIMPLE PROCESSING ROUND ${this.currentRound} ===`)
     console.log(`Processing data set ${dataSetIndex}:`, sameProbData)
 
-    // Step 1: Get simulation baseline to know how many pairs to expect
     const simulatedBaseline = this.generateSimulatedBaseline()
     const expectedPairCount = simulatedBaseline.algorithmSolution.length
     console.log(`Expected pair count from simulation: ${expectedPairCount}`)
 
-    // Step 2: Extract sameProb values from the data
     const pairSimilarities: Record<string, number> = {}
     const correlationScores: Array<{ pairName: string; score: number; sameProb: number }> = []
 
-    // Handle the data structure - it's an array of objects
     if (Array.isArray(sameProbData) && sameProbData.length > 0) {
-      // Take the first object from the array (or we could average them)
       const dataObject = sameProbData[0]
       console.log(`Using first data object:`, dataObject)
 
       if (typeof dataObject === "object" && dataObject !== null) {
-        // Process each pair in the object
         for (const [pairName, sameProbValue] of Object.entries(dataObject)) {
           if (typeof sameProbValue === "number") {
-            // Calculate correlation score: how far from random (0.5)
-            const correlationScore = Math.abs(sameProbValue - 0.5) * 2 // Scale to 0-1
+            // --- START: MODIFICATION ---
+            // The score is now the raw probability itself. Higher is always better.
+            const correlationScore = sameProbValue
+            // --- END: MODIFICATION ---
 
             pairSimilarities[pairName] = sameProbValue
             correlationScores.push({
@@ -171,7 +162,6 @@ export class HardwareQuantumSimulator {
       }
     }
 
-    // Step 3: Sort by correlation strength (highest first)
     correlationScores.sort((a, b) => b.score - a.score)
 
     console.log("=== CORRELATION RANKING ===")
@@ -181,26 +171,20 @@ export class HardwareQuantumSimulator {
       )
     })
 
-    // Step 4: Pick the top N pairs (where N = expected pair count, minimum 2)
     const targetPairCount = Math.max(2, Math.min(expectedPairCount, correlationScores.length))
     console.log(`Target pair count: ${targetPairCount}`)
 
-    // Step 5: Select top pairs using disjoint matching
     const algorithmSolution = this.selectTopDisjointPairs(correlationScores, targetPairCount)
-
     console.log(`Selected algorithm solution: [${algorithmSolution.join(", ")}]`)
 
-    // Step 6: Calculate scores
     const hardwareScore = this.calculateHardwareScore(algorithmSolution, correlationScores)
     const simulatedScore = this.calculateSimulatedScore(
       simulatedBaseline.algorithmSolution,
       simulatedBaseline.pairSimilarities,
     )
-
     console.log(`Hardware score: ${hardwareScore.toFixed(3)}`)
     console.log(`Simulated score: ${simulatedScore.toFixed(3)}`)
 
-    // Step 7: Calculate qubit display values from edge averages
     const sameProbValues: Record<string, number> = {}
     for (const entry of correlationScores) {
       sameProbValues[entry.pairName] = entry.sameProb
@@ -225,14 +209,12 @@ export class HardwareQuantumSimulator {
 
   private computeQubitValuesFromEdgeAverages(sameProbData: Record<string, number>): number[] {
     const oneProb: number[] = new Array(this.device.qubitCount).fill(0.5)
-
     console.log("=== COMPUTING QUBIT VALUES FROM EDGE AVERAGES ===")
 
     for (let qubitId = 0; qubitId < this.device.qubitCount; qubitId++) {
       const edgeValues: number[] = []
       const connectedPairs: string[] = []
 
-      // Find all pairs involving this qubit
       for (const [pairName, [q1, q2]] of Object.entries(this.device.pairs)) {
         if (q1 === qubitId || q2 === qubitId) {
           const sameProb = sameProbData[pairName]
@@ -244,22 +226,18 @@ export class HardwareQuantumSimulator {
       }
 
       if (edgeValues.length > 0) {
-        // Calculate average of all edge values for this qubit
         const average = edgeValues.reduce((sum, val) => sum + val, 0) / edgeValues.length
         oneProb[qubitId] = average
-
         console.log(
           `Qubit ${qubitId}: edges [${connectedPairs.join(", ")}] = [${edgeValues.map((v) => v.toFixed(3)).join(", ")}] → average: ${average.toFixed(3)} (${(average * 100).toFixed(0)}%)`,
         )
       } else {
-        // No edges found, use device default
         oneProb[qubitId] = this.device.exampleValues[qubitId] || 0.5
         console.log(
           `Qubit ${qubitId}: no edges found, using default: ${oneProb[qubitId]} (${(oneProb[qubitId] * 100).toFixed(0)}%)`,
         )
       }
     }
-
     return oneProb
   }
 
@@ -267,19 +245,15 @@ export class HardwareQuantumSimulator {
     algorithmSolution: string[]
     pairSimilarities: Record<string, number>
   } {
-    // Generate a simulated puzzle for comparison
     const matchingPairs = MatchingAlgorithm.getDisjointPairs(this.device.pairs, [], {})
-
     const appliedGates: Record<string, number> = {}
     for (const p of matchingPairs) {
       const frac = (0.1 + 0.9 * Math.random()) / 2
       appliedGates[p] = frac
     }
-
     const simulatedOneProb = this.simulateQuantumCircuit(appliedGates)
     const pairSimilarities = MatchingAlgorithm.calculateAllSimilarities(this.device.pairs, simulatedOneProb)
     const algorithmSolution = MatchingAlgorithm.getDisjointPairs(this.device.pairs, simulatedOneProb, {})
-
     return { algorithmSolution, pairSimilarities }
   }
 
@@ -290,13 +264,10 @@ export class HardwareQuantumSimulator {
     const usedQubits = new Set<number>()
     const selectedPairs: string[] = []
 
-    // Greedily select pairs with highest correlation that don't conflict
     for (const entry of correlationScores) {
       if (selectedPairs.length >= targetCount) break
-
       const qubits = this.device.getPairQubits(entry.pairName)
       if (!qubits) continue
-
       const [q1, q2] = qubits
       if (!usedQubits.has(q1) && !usedQubits.has(q2)) {
         selectedPairs.push(entry.pairName)
@@ -305,7 +276,6 @@ export class HardwareQuantumSimulator {
         console.log(`Selected pair ${entry.pairName} (score: ${entry.score.toFixed(3)})`)
       }
     }
-
     return selectedPairs
   }
 
@@ -327,7 +297,6 @@ export class HardwareQuantumSimulator {
     let totalScore = 0
     for (const pairName of algorithmSolution) {
       const similarity = pairSimilarities[pairName] || 1.0
-      // Convert similarity to correlation score (lower similarity = higher correlation)
       const correlationScore = 1.0 - similarity
       totalScore += correlationScore
     }
@@ -345,11 +314,9 @@ export class HardwareQuantumSimulator {
       : 1
     const totalExperiments = totalDataSets * experimentsPerDataSet
     const maxHardwareRounds = Math.min(8, totalExperiments)
-
     const globalRoundIndex = this.currentRound % maxHardwareRounds
     const dataSetIndex = Math.floor(globalRoundIndex / experimentsPerDataSet)
     const experimentIndex = globalRoundIndex % experimentsPerDataSet
-
     const oneProbDataSet = this.hardwareData.oneProbs[dataSetIndex]
     const oneProb = Array.isArray(oneProbDataSet) ? oneProbDataSet[experimentIndex] : oneProbDataSet
 
@@ -363,13 +330,11 @@ export class HardwareQuantumSimulator {
 
   private generateSimulatedPuzzle(): HardwarePuzzleResult {
     const matchingPairs = MatchingAlgorithm.getDisjointPairs(this.device.pairs, [], {})
-
     const appliedGates: Record<string, number> = {}
     for (const p of matchingPairs) {
       const frac = (0.1 + 0.9 * Math.random()) / 2
       appliedGates[p] = frac
     }
-
     const oneProb = this.simulateQuantumCircuit(appliedGates)
     const pairSimilarities = MatchingAlgorithm.calculateAllSimilarities(this.device.pairs, oneProb)
     const algorithmSolution = MatchingAlgorithm.getDisjointPairs(this.device.pairs, oneProb, {})
@@ -396,16 +361,13 @@ export class HardwareQuantumSimulator {
       const [q1, q2] = qubits
       if (oneProb[q1] !== null && oneProb[q2] !== null) {
         const targetOneProb = Math.sin((frac * Math.PI) / 2) ** 2
-
         const baseNoise = 0.005
         const noise1 = (Math.random() - 0.5) * baseNoise
         const noise2 = noise1 + (Math.random() - 0.5) * baseNoise * 0.1
-
         oneProb[q1] = Math.max(0, Math.min(1, targetOneProb + noise1))
         oneProb[q2] = Math.max(0, Math.min(1, targetOneProb + noise2))
       }
     }
-
     return oneProb
   }
 

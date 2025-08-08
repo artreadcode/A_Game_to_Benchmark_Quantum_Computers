@@ -13,7 +13,7 @@ export interface GameState {
   maxRounds: number
   targetPairs: number
   wrongGuesses: string[]
-  dataType?: "oneProbs" | "sameProbs" // Track data type for different logic
+  dataType?: "oneProbs" | "sameProbs"
 }
 
 export interface RoundResult {
@@ -56,13 +56,16 @@ export class GameManager {
     return { ...this.state }
   }
 
-  startGame(puzzleResult: {
-    oneProb: number[]
-    algorithmSolution: string[]
-    matchingPairs: string[]
-    pairSimilarities: Record<string, number>
-    dataType?: "oneProbs" | "sameProbs"
-  }): void {
+  startGame(
+    puzzleResult: {
+      oneProb: number[]
+      algorithmSolution: string[]
+      matchingPairs: string[]
+      pairSimilarities: Record<string, number>
+      dataType?: "oneProbs" | "sameProbs"
+    },
+    fileType?: "oneProbs" | "sameProbs",
+  ): void {
     this.state = {
       ...this.getInitialState(),
       oneProb: puzzleResult.oneProb,
@@ -71,13 +74,12 @@ export class GameManager {
       originalMatching: puzzleResult.matchingPairs,
       isGameActive: true,
       targetPairs: puzzleResult.algorithmSolution.length,
-      dataType: puzzleResult.dataType || "oneProbs",
+      dataType: fileType || puzzleResult.dataType || "oneProbs",
     }
 
     console.log("=== GAME STARTED ===")
-    console.log("Data type:", this.state.dataType)
-    console.log("Algorithm solution:", puzzleResult.algorithmSolution)
-    console.log("Pair similarities:", puzzleResult.pairSimilarities)
+    console.log("Data type of source:", this.state.dataType)
+    console.log("Algorithm solution for this puzzle:", puzzleResult.algorithmSolution)
     console.log("Target pairs:", puzzleResult.algorithmSolution.length)
   }
 
@@ -86,64 +88,31 @@ export class GameManager {
       return { roundComplete: false }
     }
 
+    // --- MODIFIED: Simplified logic ---
+    // Correctness is now ALWAYS determined by checking against the puzzle's specific solution.
+    // This removes the separate "simulation mode" from the guessing logic.
+    const isCorrect = this.state.algorithmSolution.includes(pairName)
+
+    console.log(`=== GUESS: ${pairName}, Correct: ${isCorrect} ===`)
+
     const newGuessedPairs = [...this.state.guessedPairs, pairName]
-    const similarity = this.state.pairSimilarities[pairName] || 0.5
-
-    // Different logic for different data types
-    let isCorrect = false
-    if (this.state.dataType === "sameProbs") {
-      // For sameProbs: check if this pair is in the algorithm solution
-      isCorrect = this.state.algorithmSolution.includes(pairName)
-    } else {
-      // For oneProbs: use similarity threshold
-      const threshold = 0.15
-      isCorrect = similarity <= threshold
-    }
-
-    console.log(`=== GUESS: ${pairName} ===`)
-    console.log(`Data type: ${this.state.dataType}`)
-    console.log(`Similarity: ${similarity.toFixed(3)}, Correct: ${isCorrect}`)
-    console.log(`Algorithm solution: [${this.state.algorithmSolution.join(", ")}]`)
-
     if (isCorrect) {
       this.state.guessedPairs = newGuessedPairs
       this.state.roundScore += 1
-      console.log(`✅ Correct! Score: ${this.state.roundScore}/${this.state.targetPairs}`)
     } else {
       this.state.guessedPairs = newGuessedPairs
       this.state.wrongGuesses = [...this.state.wrongGuesses, pairName]
-      console.log(`❌ Wrong! Score remains: ${this.state.roundScore}/${this.state.targetPairs}`)
     }
 
-    // Check round completion
-    const correctGuesses = this.state.guessedPairs.filter((pair) => {
-      if (this.state.dataType === "sameProbs") {
-        return this.state.algorithmSolution.includes(pair)
-      } else {
-        const sim = this.state.pairSimilarities[pair] || 1.0
-        return sim <= 0.1
-      }
-    })
-
-    console.log(
-      `Correct guesses so far: [${correctGuesses.join(", ")}] (${correctGuesses.length}/${this.state.algorithmSolution.length})`,
+    const allAlgorithmPairsFound = this.state.algorithmSolution.every((correctPair) =>
+      this.state.guessedPairs.includes(correctPair),
     )
-
-    // Round is complete when all algorithm solution pairs are found
-    const allAlgorithmPairsFound = this.state.algorithmSolution.every((correctPair) => {
-      return this.state.guessedPairs.includes(correctPair)
-    })
-
-    console.log(`All algorithm pairs found: ${allAlgorithmPairsFound}`)
 
     if (allAlgorithmPairsFound) {
       const isGameComplete = this.state.round >= this.state.maxRounds
-
       this.state.roundComplete = true
       this.state.totalScore += this.state.roundScore
       this.state.roundScores.push(this.state.roundScore)
-
-      console.log(`🎉 ROUND COMPLETE! Final score: ${this.state.roundScore}/${this.state.targetPairs}`)
 
       const roundResult: RoundResult = {
         round: this.state.round,
@@ -153,7 +122,6 @@ export class GameManager {
         playerGuesses: this.state.guessedPairs,
         isGameComplete,
       }
-
       return { roundComplete: true, roundResult }
     }
 
@@ -169,8 +137,6 @@ export class GameManager {
   }): boolean {
     if (this.state.round >= this.state.maxRounds) {
       this.state.isGameActive = false
-      this.state.guessedPairs = []
-      this.state.roundComplete = false
       return false
     }
 
@@ -186,10 +152,6 @@ export class GameManager {
       this.state.roundComplete = false
       this.state.targetPairs = puzzleResult.algorithmSolution.length
       this.state.dataType = puzzleResult.dataType || "oneProbs"
-
-      console.log(`=== ROUND ${this.state.round} STARTED ===`)
-      console.log("Data type:", this.state.dataType)
-      console.log("New algorithm solution:", puzzleResult.algorithmSolution)
     }
 
     return true
@@ -203,13 +165,9 @@ export class GameManager {
     return this.state.guessedPairs.includes(pairName)
   }
 
+  // --- MODIFIED: Simplified logic to match makeGuess ---
   isPairCorrect(pairName: string): boolean {
-    if (this.state.dataType === "oneProbs") {
-      return this.state.algorithmSolution.includes(pairName)
-    } else {
-      const similarity = this.state.pairSimilarities[pairName] || 1.0
-      return similarity <= 0.15
-    }
+    return this.state.algorithmSolution.includes(pairName)
   }
 
   deselectPair(pairName: string): { success: boolean } {
@@ -223,13 +181,11 @@ export class GameManager {
     if (isPairGuessed) {
       this.state.guessedPairs = this.state.guessedPairs.filter((p) => p !== pairName)
 
-      if (!isPairCorrect) {
-        this.state.wrongGuesses = this.state.wrongGuesses.filter((p) => p !== pairName)
-      } else {
+      if (isPairCorrect) {
         this.state.roundScore = Math.max(0, this.state.roundScore - 1)
+      } else {
+        this.state.wrongGuesses = this.state.wrongGuesses.filter((p) => p !== pairName)
       }
-
-      console.log(`Deselected ${pairName}. New score: ${this.state.roundScore}`)
       return { success: true }
     }
 

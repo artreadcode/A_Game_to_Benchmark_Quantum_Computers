@@ -842,7 +842,8 @@ export default function QuantumCouplingVisualizer() {
     }
 
     const puzzle = simulator.generateNewPuzzle()
-    gameManager.startGame(puzzle)
+    // --- MODIFIED: Pass the selected file's type to the game manager ---
+    gameManager.startGame(puzzle, selectedDataFile?.fileType)
     setGameState(gameManager.getState())
   }
 
@@ -969,24 +970,26 @@ export default function QuantumCouplingVisualizer() {
               const isPairGuessed = gameState.guessedPairs.includes(pairName)
               const isPairCorrect = gameState.algorithmSolution.includes(pairName)
 
-              // --- START: MODIFICATION FOR EDGE THICKNESS ---
               let strokeColor = "#6b7280"
-              let strokeWidth = "2" // Default thickness
+              let strokeWidth = "2"
 
               if (gameState.dataType === 'sameProbs' && gameState.isGameActive) {
+                // console.log("==================Hello==================");
                 const similarity = gameState.pairSimilarities[pairName] || 0
-                // Invert similarity so higher similarity = thicker line. Clamp between 1 and 8.
-                // const invertedSimilarity = 1 - similarity;
-                strokeWidth = `${Math.max(1, 10 * Math.pow(similarity, 2))}`
+                const invertedSimilarity = 1 - similarity
+                // Using an exponential scale for more dramatic thickness
+                strokeWidth = `${Math.max(1.5, 12 * Math.pow(similarity, 2))}`
+                // new data: invertedSimilarity, old data: similarity???? => Fixed because it was using abs.
+
+                // console.log("StrokeWidth: ", strokeWidth, "similarity: ", invertedSimilarity, pairName)
               } else {
-                strokeWidth = "4" // Keep original thickness for oneProbs
+                strokeWidth = "4"
               }
 
               if (gameState.isGameActive && isPairGuessed) {
                 strokeColor = isPairCorrect ? "#10b981" : "#ef4444"
-                strokeWidth = `${parseFloat(strokeWidth) + 2}` // Make guessed pairs thicker
+                strokeWidth = `${parseFloat(strokeWidth) + 2}`
               }
-              // --- END: MODIFICATION FOR EDGE THICKNESS ---
 
               return (
                 <g key={pairName}>
@@ -1019,20 +1022,17 @@ export default function QuantumCouplingVisualizer() {
               const x = (pos[0] - minX) * scale + padding
               const y = (maxYActual - pos[1]) * scale + padding
               
-              // --- START: MODIFICATION FOR QUBIT COLOR ---
-              let qubitFillColor = "#9ca3af"; // Default gray color for sameProbs
+              let qubitFillColor = "#9ca3af";
 
               if (gameState.dataType === 'oneProbs' && gameState.isGameActive && gameState.oneProb.length > 0) {
                 const qubitValue = gameState.oneProb[qubitId];
                 const qubitColour = qubitValue !== null ? Math.max(0, Math.min(1, qubitValue)) : 0;
                 
-                // Red to Blue gradient logic
                 const R = Math.round(239 + (59 - 239) * qubitColour);
                 const B = Math.round(68 + (246 - 68) * qubitColour);
                 const G = Math.round(68 + (130 - 68) * qubitColour);
                 qubitFillColor = `rgb(${R},${G},${B})`;
               } else if (gameState.dataType === 'oneProbs') {
-                // Fallback for oneProbs before game starts
                 const qubitValue = device.getQubitValue(qubitId);
                 const qubitColour = qubitValue !== null ? Math.max(0, Math.min(1, qubitValue)) : 0;
                 const R = Math.round(239 + (59 - 239) * qubitColour);
@@ -1040,7 +1040,6 @@ export default function QuantumCouplingVisualizer() {
                 const G = Math.round(68 + (130 - 68) * qubitColour);
                 qubitFillColor = `rgb(${R},${G},${B})`;
               }
-              // --- END: MODIFICATION FOR QUBIT COLOR ---
         
               return (
                 <g key={qubitId}>
@@ -1155,7 +1154,6 @@ export default function QuantumCouplingVisualizer() {
                       </div>
                     </div>
 
-                    {/* Show available data files with sample data */}
                     {dataAvailable.availableFiles.length > 0 && useRealHardware && (
                       <div className="space-y-2">
                         <div className="flex items-center gap-4">
@@ -1192,7 +1190,6 @@ export default function QuantumCouplingVisualizer() {
                     )}
                   </div>
 
-                  {/* Simplified game interface - just Start Game button */}
                   <div className="mt-4">
                     {!gameState.isGameActive ? (
                       <div className="text-center space-y-4">
