@@ -867,6 +867,23 @@ export default function QuantumCouplingVisualizer() {
     }
   }
 
+  const handleNextRound = () => {
+    const puzzle = simulator.generateNewPuzzle()
+    const canContinue = gameManager.nextRound(puzzle)
+    if (canContinue) {
+      setGameState(gameManager.getState())
+    }
+  }
+
+  const handleCheat = () => {
+    const result = gameManager.revealSolution()
+    setGameState(gameManager.getState())
+
+    if (result.roundComplete && result.roundResult?.isGameComplete) {
+      handleGameComplete(gameManager.getState())
+    }
+  }
+
   const handleResetGame = () => {
     gameManager.resetGame()
     setGameState(gameManager.getState())
@@ -1211,25 +1228,37 @@ export default function QuantumCouplingVisualizer() {
                             <Badge variant="outline" className="text-xs">
                               Round {gameState.round}
                             </Badge>
-                            
                           </div>
-                          <Button onClick={handleResetGame} variant="outline" size="sm">
-                            Reset Game
-                          </Button>
+                          <div className="flex items-center gap-2">
+                            {/* --- NEW: Cheat Button --- */}
+                            <Button onClick={handleCheat} variant="destructive" size="sm" disabled={gameState.roundComplete}>
+                              Cheat
+                            </Button>
+                            <Button onClick={handleResetGame} variant="outline" size="sm">
+                              Reset Game
+                            </Button>
+                          </div>
                         </div>
 
-                        <div className="text-sm text-gray-600">
-                          <p>
-                            <strong>Instructions:</strong> Click on the edges to make your guesses.
-                          </p>
-                          <p>Paired qubits should have similar colours.</p>
-                        </div>
-
-                        {gameState.guessedPairs.length === gameState.algorithmSolution.length && (
+                        {/* --- MODIFICATION: This block now shows the Next Round button --- */}
+                        {gameState.roundComplete ? (
                           <div className="text-center p-4 bg-blue-50 rounded-lg">
                             <h3 className="font-bold text-lg">Round Complete!</h3>
-                            <p>If you reply all answers correctly, the puzzle will move onto the next round.</p>
+                            {gameState.round < gameState.maxRounds ? (
+                              <Button onClick={handleNextRound} className="mt-2">
+                                Next Round
+                              </Button>
+                            ) : (
+                              <p className="text-sm mt-2">Game Over! Thanks for playing.</p>
+                            )}
                           </div>
+                        ) : (
+                           <div className="text-sm text-gray-600">
+                             <p>
+                               <strong>Instructions:</strong> Click on the edges to make your guesses.
+                             </p>
+                             <p>Paired qubits should have similar colours.</p>
+                           </div>
                         )}
                       </div>
                     )}

@@ -76,26 +76,16 @@ export class GameManager {
       targetPairs: puzzleResult.algorithmSolution.length,
       dataType: fileType || puzzleResult.dataType || "oneProbs",
     }
-
-    console.log("=== GAME STARTED ===")
-    console.log("Data type of source:", this.state.dataType)
-    console.log("Algorithm solution for this puzzle:", puzzleResult.algorithmSolution)
-    console.log("Target pairs:", puzzleResult.algorithmSolution.length)
   }
 
   makeGuess(pairName: string): { roundComplete: boolean; roundResult?: RoundResult } {
     if (!this.state.isGameActive || this.state.guessedPairs.includes(pairName) || this.state.roundComplete) {
       return { roundComplete: false }
     }
-
-    // --- MODIFIED: Simplified logic ---
-    // Correctness is now ALWAYS determined by checking against the puzzle's specific solution.
-    // This removes the separate "simulation mode" from the guessing logic.
+    
     const isCorrect = this.state.algorithmSolution.includes(pairName)
-
-    console.log(`=== GUESS: ${pairName}, Correct: ${isCorrect} ===`)
-
     const newGuessedPairs = [...this.state.guessedPairs, pairName]
+    
     if (isCorrect) {
       this.state.guessedPairs = newGuessedPairs
       this.state.roundScore += 1
@@ -103,31 +93,49 @@ export class GameManager {
       this.state.guessedPairs = newGuessedPairs
       this.state.wrongGuesses = [...this.state.wrongGuesses, pairName]
     }
-
+    
     const allAlgorithmPairsFound = this.state.algorithmSolution.every((correctPair) =>
       this.state.guessedPairs.includes(correctPair),
     )
 
     if (allAlgorithmPairsFound) {
-      const isGameComplete = this.state.round >= this.state.maxRounds
-      this.state.roundComplete = true
-      this.state.totalScore += this.state.roundScore
-      this.state.roundScores.push(this.state.roundScore)
-
-      const roundResult: RoundResult = {
-        round: this.state.round,
-        score: this.state.roundScore,
-        total: this.state.targetPairs,
-        correctPairs: this.state.algorithmSolution,
-        playerGuesses: this.state.guessedPairs,
-        isGameComplete,
-      }
-      return { roundComplete: true, roundResult }
+      return this.completeRound()
     }
 
     return { roundComplete: false }
   }
 
+  // --- NEW: Function to automatically solve the round ---
+  revealSolution(): { roundComplete: boolean; roundResult?: RoundResult } {
+    if (!this.state.isGameActive || this.state.roundComplete) {
+      return { roundComplete: false }
+    }
+    
+    // Select all correct pairs and award max score for the round
+    this.state.guessedPairs = [...this.state.algorithmSolution]
+    this.state.wrongGuesses = []
+    this.state.roundScore = this.state.algorithmSolution.length
+    
+    return this.completeRound()
+  }
+
+  private completeRound(): { roundComplete: boolean; roundResult: RoundResult } {
+    const isGameComplete = this.state.round >= this.state.maxRounds
+    this.state.roundComplete = true
+    this.state.totalScore += this.state.roundScore
+    this.state.roundScores.push(this.state.roundScore)
+    
+    const roundResult: RoundResult = {
+      round: this.state.round,
+      score: this.state.roundScore,
+      total: this.state.targetPairs,
+      correctPairs: this.state.algorithmSolution,
+      playerGuesses: this.state.guessedPairs,
+      isGameComplete,
+    }
+    return { roundComplete: true, roundResult }
+  }
+  
   nextRound(puzzleResult?: {
     oneProb: number[]
     algorithmSolution: string[]
@@ -164,8 +172,7 @@ export class GameManager {
   isPairGuessed(pairName: string): boolean {
     return this.state.guessedPairs.includes(pairName)
   }
-
-  // --- MODIFIED: Simplified logic to match makeGuess ---
+  
   isPairCorrect(pairName: string): boolean {
     return this.state.algorithmSolution.includes(pairName)
   }

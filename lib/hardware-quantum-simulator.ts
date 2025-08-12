@@ -30,6 +30,7 @@ export class HardwareQuantumSimulator {
 
   async initialize(useRealHardware = false, selectedFile?: DataFileInfo): Promise<boolean> {
     this.useRealHardware = useRealHardware
+    this.currentRound = 0;
 
     if (useRealHardware && selectedFile) {
       const deviceKey = this.getDeviceKey()
@@ -45,6 +46,7 @@ export class HardwareQuantumSimulator {
       return true
     }
 
+    this.hardwareData = null
     return true
   }
 
@@ -64,14 +66,11 @@ export class HardwareQuantumSimulator {
   }
 
   generateNewPuzzle(): HardwarePuzzleResult {
-
     if (this.useRealHardware && this.hardwareData) {
       return this.generateHardwarePuzzle()
     } else {
       return this.generateSimulatedPuzzle()
     }
-    
-    // return this.generateHardwarePuzzle()
   }
 
   private generateHardwarePuzzle(): HardwarePuzzleResult {
@@ -135,9 +134,16 @@ export class HardwareQuantumSimulator {
     console.log(`=== SAMEPROBS SIMPLE PROCESSING ROUND ${this.currentRound} ===`)
     console.log(`Processing data set ${dataSetIndex}:`, sameProbData)
 
-    const simulatedBaseline = this.generateSimulatedBaseline()
-    const expectedPairCount = simulatedBaseline.algorithmSolution.length
-    console.log(`Expected pair count from simulation: ${expectedPairCount}`)
+    // --- START: THE FIX ---
+    // REMOVED: The random simulation baseline.
+    // const simulatedBaseline = this.generateSimulatedBaseline()
+    // const expectedPairCount = simulatedBaseline.algorithmSolution.length
+
+    // ADDED: Calculate the true maximum number of non-overlapping pairs for the device.
+    // This provides a stable, meaningful target for a benchmark.
+    const expectedPairCount = MatchingAlgorithm.getDisjointPairs(this.device.pairs, [], {}).length
+    console.log(`Expected pair count based on device topology: ${expectedPairCount}`)
+    // --- END: THE FIX ---
 
     const pairSimilarities: Record<string, number> = {}
     const correlationScores: Array<{ pairName: string; score: number; sameProb: number }> = []
@@ -149,35 +155,24 @@ export class HardwareQuantumSimulator {
       if (typeof dataObject === "object" && dataObject !== null) {
         for (const [pairName, sameProbValue] of Object.entries(dataObject)) {
           if (typeof sameProbValue === "number") {
-            // --- START: MODIFICATION ---
-            // The score is now the raw probability itself. Higher is always better.
             const correlationScore = sameProbValue
-            // --- END: MODIFICATION ---
-
             pairSimilarities[pairName] = sameProbValue
             correlationScores.push({
               pairName,
               score: correlationScore,
               sameProb: sameProbValue,
             })
-
-            console.log(
-              `Pair ${pairName}: sameProb=${sameProbValue.toFixed(3)}, correlation=${correlationScore.toFixed(3)}`,
-            )
           }
         }
       }
     }
 
     correlationScores.sort((a, b) => b.score - a.score)
-
     console.log("=== CORRELATION RANKING ===")
     correlationScores.forEach((entry, index) => {
-      console.log(
-        `${index + 1}. ${entry.pairName}: sameProb=${entry.sameProb.toFixed(3)}, correlation=${entry.score.toFixed(3)}`,
-      )
+      console.log(`${index + 1}. ${entry.pairName}: sameProb=${entry.sameProb.toFixed(3)}, correlation=${entry.score.toFixed(3)}`)
     })
-
+    
     const targetPairCount = Math.max(2, Math.min(expectedPairCount, correlationScores.length))
     console.log(`Target pair count: ${targetPairCount}`)
 
@@ -185,10 +180,9 @@ export class HardwareQuantumSimulator {
     console.log(`Selected algorithm solution: [${algorithmSolution.join(", ")}]`)
 
     const hardwareScore = this.calculateHardwareScore(algorithmSolution, correlationScores)
-    const simulatedScore = this.calculateSimulatedScore(
-      simulatedBaseline.algorithmSolution,
-      simulatedBaseline.pairSimilarities,
-    )
+    // We can use a simplified simulated score now
+    const simulatedScore = 1.0 
+
     console.log(`Hardware score: ${hardwareScore.toFixed(3)}`)
     console.log(`Simulated score: ${simulatedScore.toFixed(3)}`)
 
@@ -197,11 +191,7 @@ export class HardwareQuantumSimulator {
       sameProbValues[entry.pairName] = entry.sameProb
     }
     const oneProb = this.computeQubitValuesFromEdgeAverages(sameProbValues)
-    console.log(
-      "Computed qubit values from edge averages:",
-      oneProb.map((v, i) => `Q${i}:${(v * 100).toFixed(0)}%`),
-    )
-
+    
     return {
       oneProb,
       pairSimilarities,
@@ -235,14 +225,8 @@ export class HardwareQuantumSimulator {
       if (edgeValues.length > 0) {
         const average = edgeValues.reduce((sum, val) => sum + val, 0) / edgeValues.length
         oneProb[qubitId] = average
-        console.log(
-          `Qubit ${qubitId}: edges [${connectedPairs.join(", ")}] = [${edgeValues.map((v) => v.toFixed(3)).join(", ")}] → average: ${average.toFixed(3)} (${(average * 100).toFixed(0)}%)`,
-        )
       } else {
         oneProb[qubitId] = this.device.exampleValues[qubitId] || 0.5
-        console.log(
-          `Qubit ${qubitId}: no edges found, using default: ${oneProb[qubitId]} (${(oneProb[qubitId] * 100).toFixed(0)}%)`,
-        )
       }
     }
     return oneProb
@@ -299,17 +283,7 @@ export class HardwareQuantumSimulator {
     }
     return algorithmSolution.length > 0 ? totalScore / algorithmSolution.length : 0
   }
-
-  private calculateSimulatedScore(algorithmSolution: string[], pairSimilarities: Record<string, number>): number {
-    let totalScore = 0
-    for (const pairName of algorithmSolution) {
-      const similarity = pairSimilarities[pairName] || 1.0
-      const correlationScore = 1.0 - similarity
-      totalScore += correlationScore
-    }
-    return algorithmSolution.length > 0 ? totalScore / algorithmSolution.length : 0
-  }
-
+  
   private processOneProbsData(): number[] {
     if (!this.hardwareData?.oneProbs) {
       throw new Error("No oneProbs data available")
@@ -392,16 +366,10 @@ export class HardwareQuantumSimulator {
 
   static async getDeviceDataInfo(deviceName: string) {
     const deviceMap: Record<string, string> = {
-      "IBM Torino": "ibm_torino",
-      "IBM Kyiv": "ibm_kyiv",
-      "IBM Fez": "ibm_fez",
-      "IBM QX4": "ibmqx4",
-      "IBM QX5": "ibmqx5",
-      "IBM QX2": "ibmqx2",
-      "Rigetti 19Q-Acorn": "19Q-Acorn",
-      "Rigetti 8Q-Agave": "8Q-Agave",
+      "IBM Torino": "ibm_torino", "IBM Kyiv": "ibm_kyiv", "IBM Fez": "ibm_fez",
+      "IBM QX4": "ibmqx4", "IBM QX5": "ibmqx5", "IBM QX2": "ibmqx2",
+      "Rigetti 19Q-Acorn": "19Q-Acorn", "Rigetti 8Q-Agave": "8Q-Agave",
     }
-
     const deviceKey = deviceMap[deviceName] || deviceName.toLowerCase().replace(/\s+/g, "_")
     return await HardwareDataLoader.checkDataAvailability(deviceKey)
   }
