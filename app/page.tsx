@@ -851,19 +851,9 @@ export default function QuantumCouplingVisualizer() {
     const result = gameManager.makeGuess(pairName)
     setGameState(gameManager.getState())
 
-    if (result.roundComplete && result.roundResult) {
-      setTimeout(() => {
-        if (!result.roundResult!.isGameComplete) {
-          const puzzle = simulator.generateNewPuzzle()
-          const canContinue = gameManager.nextRound(puzzle)
-          if (canContinue) {
-            setGameState(gameManager.getState())
-          }
-        } else {
-          // Game is complete
-          handleGameComplete(gameManager.getState())
-        }
-      }, 2000)
+    // Check if the entire game is complete after the round ends
+    if (result.roundComplete && result.roundResult?.isGameComplete) {
+      handleGameComplete(gameManager.getState())
     }
   }
 
@@ -1240,7 +1230,6 @@ export default function QuantumCouplingVisualizer() {
                           </div>
                         </div>
 
-                        {/* --- MODIFICATION: This block now shows the Next Round button --- */}
                         {gameState.roundComplete ? (
                           <div className="text-center p-4 bg-blue-50 rounded-lg">
                             <h3 className="font-bold text-lg">Round Complete!</h3>
@@ -1268,6 +1257,10 @@ export default function QuantumCouplingVisualizer() {
 
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">Device Layout</h3>
+                {!gameState.isGameActive && (
+                    <Badge variant="outline">Example</Badge>
+                )}
+
                 {renderQuantumVisualization()}
               </div>
             </div>
