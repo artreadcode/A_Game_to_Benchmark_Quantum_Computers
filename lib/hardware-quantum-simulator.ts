@@ -64,7 +64,14 @@ export class HardwareQuantumSimulator {
   }
 
   generateNewPuzzle(): HardwarePuzzleResult {
-    return this.generateHardwarePuzzle()
+
+    if (this.useRealHardware && this.hardwareData) {
+      return this.generateHardwarePuzzle()
+    } else {
+      return this.generateSimulatedPuzzle()
+    }
+    
+    // return this.generateHardwarePuzzle()
   }
 
   private generateHardwarePuzzle(): HardwarePuzzleResult {
