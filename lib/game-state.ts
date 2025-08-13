@@ -13,7 +13,7 @@ export interface GameState {
   maxRounds: number
   targetPairs: number
   wrongGuesses: string[]
-  dataType?: "oneProbs" | "sameProbs"
+  // dataType?: "oneProbs" | "sameProbs"
 }
 
 export interface RoundResult {
@@ -45,7 +45,7 @@ export class GameManager {
       originalMatching: [],
       isGameActive: false,
       roundComplete: false,
-      maxRounds: 8,
+      maxRounds: 6,
       targetPairs: 0,
       wrongGuesses: [],
       dataType: "oneProbs",
@@ -62,7 +62,6 @@ export class GameManager {
       algorithmSolution: string[]
       matchingPairs: string[]
       pairSimilarities: Record<string, number>
-      dataType?: "oneProbs" | "sameProbs"
     },
     fileType?: "oneProbs" | "sameProbs",
   ): void {
@@ -74,7 +73,6 @@ export class GameManager {
       originalMatching: puzzleResult.matchingPairs,
       isGameActive: true,
       targetPairs: puzzleResult.algorithmSolution.length,
-      dataType: fileType || puzzleResult.dataType || "oneProbs",
     }
   }
 
@@ -141,7 +139,7 @@ export class GameManager {
     algorithmSolution: string[]
     matchingPairs: string[]
     pairSimilarities: Record<string, number>
-    dataType?: "oneProbs" | "sameProbs"
+    
   }): boolean {
     if (this.state.round >= this.state.maxRounds) {
       this.state.isGameActive = false
@@ -159,7 +157,7 @@ export class GameManager {
       this.state.originalMatching = puzzleResult.matchingPairs
       this.state.roundComplete = false
       this.state.targetPairs = puzzleResult.algorithmSolution.length
-      this.state.dataType = puzzleResult.dataType || "oneProbs"
+      
     }
 
     return true

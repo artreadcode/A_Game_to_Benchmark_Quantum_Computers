@@ -12,7 +12,6 @@ export interface HardwarePuzzleResult {
   totalRounds: number
   dataType: "oneProbs" | "sameProbs"
   benchmarkInfo?: {
-    simulatedScore: number
     hardwareScore: number
     optimalPairCount: number
   }
@@ -34,15 +33,30 @@ export class HardwareQuantumSimulator {
 
     if (useRealHardware && selectedFile) {
       const deviceKey = this.getDeviceKey()
-      this.hardwareData = await HardwareDataLoader.loadDeviceData(deviceKey, selectedFile)
+      const data = await HardwareDataLoader.loadDeviceData(deviceKey, selectedFile)
 
-      if (!this.hardwareData) {
-        console.warn(`Failed to load selected data file for ${deviceKey}`)
+      if (!data) {
+        // console.warn(`Failed to load selected data file for ${deviceKey}`)
         this.useRealHardware = false
         return false
       }
 
-      console.log(`Loaded hardware data: ${this.hardwareData.displayName} (${this.hardwareData.fileType})`)
+      this.hardwareData = data;
+
+      // console.log(`Loaded hardware data: ${this.hardwareData.displayName} (${this.hardwareData.fileType})`)
+
+      if (this.hardwareData.fileType == "sameProbs") {
+        const oneProbsFileName = selectedFile.fileName.replace("sameProbs", "oneProbs");
+        const oneProbsFile = await HardwareDataLoader.discoverAvailableFiles(deviceKey).then((files) =>
+          files.find((f) => f.fileName == oneProbsFileName),
+        )
+        if (oneProbsFile) {
+          const oneProbsData = await HardwareDataLoader.loadDeviceData(deviceKey, oneProbsFile);
+          if (oneProbsData) {
+            this.hardwareData.oneProbs = oneProbsData.oneProbs;
+          }
+        }
+      }
       return true
     }
 
@@ -75,41 +89,40 @@ export class HardwareQuantumSimulator {
 
   private generateHardwarePuzzle(): HardwarePuzzleResult {
     if (!this.hardwareData) {
-      throw new Error("No hardware data available")
+      throw new Error("No hardware data available");
     }
 
-    let processedOneProb: number[]
-    let pairSimilarities: Record<string, number> = {}
-    let algorithmSolution: string[] = []
-    let benchmarkInfo: any = undefined
+    // Always process oneProbs for node colors.
+    const processedOneProb = this.processOneProbsData();
+    let pairSimilarities: Record<string, number> = {};
+    let algorithmSolution: string[] = [];
+    let benchmarkInfo: any = undefined;
 
-    if (this.hardwareData.fileType === "oneProbs") {
-      processedOneProb = this.processOneProbsData()
-      pairSimilarities = MatchingAlgorithm.calculateAllSimilarities(this.device.pairs, processedOneProb)
-      algorithmSolution = MatchingAlgorithm.getDisjointPairs(this.device.pairs, processedOneProb, {})
-    } else if (this.hardwareData.fileType === "sameProbs") {
-      const result = this.processSameProbsSimple()
-      processedOneProb = result.oneProb
-      pairSimilarities = result.pairSimilarities
-      algorithmSolution = result.algorithmSolution
-      benchmarkInfo = result.benchmarkInfo
+    // If the primary data source is sameProbs, use it for edges and the algorithm.
+    // Otherwise, calculate similarities from the oneProbs data.
+    if (this.hardwareData.fileType === "sameProbs" && this.hardwareData.sameProbs) {
+      const sameProbsResult = this.processSameProbsSimple();
+      pairSimilarities = sameProbsResult.pairSimilarities;
+      algorithmSolution = sameProbsResult.algorithmSolution;
+      benchmarkInfo = sameProbsResult.benchmarkInfo;
     } else {
-      throw new Error(`Unsupported data type: ${this.hardwareData.fileType}`)
+      pairSimilarities = MatchingAlgorithm.calculateAllSimilarities(this.device.pairs, processedOneProb);
+      algorithmSolution = MatchingAlgorithm.getDisjointPairs(this.device.pairs, processedOneProb, {});
     }
 
-    const matchingPairs = Object.keys(pairSimilarities)
+    const matchingPairs = Object.keys(pairSimilarities);
 
     return {
-      oneProb: processedOneProb,
+      oneProb: processedOneProb, // Always uses the correct oneProb data.
       algorithmSolution,
       matchingPairs,
-      pairSimilarities,
+      pairSimilarities, // Based on sameProbs if available, otherwise calculated.
       isRealHardware: true,
       roundNumber: this.currentRound++,
       totalRounds: 8,
       dataType: this.hardwareData.fileType,
       benchmarkInfo,
-    }
+    };
   }
 
   private processSameProbsSimple(): {
@@ -134,14 +147,8 @@ export class HardwareQuantumSimulator {
     console.log(`=== SAMEPROBS SIMPLE PROCESSING ROUND ${this.currentRound} ===`)
     console.log(`Processing data set ${dataSetIndex}:`, sameProbData)
 
-    // --- START: THE FIX ---
-    // REMOVED: The random simulation baseline.
-    // const simulatedBaseline = this.generateSimulatedBaseline()
-    // const expectedPairCount = simulatedBaseline.algorithmSolution.length
-
-    // ADDED: Calculate the true maximum number of non-overlapping pairs for the device.
-    // This provides a stable, meaningful target for a benchmark.
-    const expectedPairCount = MatchingAlgorithm.getDisjointPairs(this.device.pairs, [], {}).length
+    const expectedPairCount = Math.floor(this.device.qubitCount / 2);
+    // const expectedPairCount = MatchingAlgorithm.getDisjointPairs(this.device.pairs, [], {}).length
     console.log(`Expected pair count based on device topology: ${expectedPairCount}`)
     // --- END: THE FIX ---
 
@@ -168,10 +175,12 @@ export class HardwareQuantumSimulator {
     }
 
     correlationScores.sort((a, b) => b.score - a.score)
+    /*
     console.log("=== CORRELATION RANKING ===")
     correlationScores.forEach((entry, index) => {
       console.log(`${index + 1}. ${entry.pairName}: sameProb=${entry.sameProb.toFixed(3)}, correlation=${entry.score.toFixed(3)}`)
     })
+    */
     
     const targetPairCount = Math.max(2, Math.min(expectedPairCount, correlationScores.length))
     console.log(`Target pair count: ${targetPairCount}`)
@@ -181,55 +190,25 @@ export class HardwareQuantumSimulator {
 
     const hardwareScore = this.calculateHardwareScore(algorithmSolution, correlationScores)
     // We can use a simplified simulated score now
-    const simulatedScore = 1.0 
+    // const simulatedScore = 1.0 
 
     console.log(`Hardware score: ${hardwareScore.toFixed(3)}`)
-    console.log(`Simulated score: ${simulatedScore.toFixed(3)}`)
+    // console.log(`Simulated score: ${simulatedScore.toFixed(3)}`)
 
     const sameProbValues: Record<string, number> = {}
     for (const entry of correlationScores) {
       sameProbValues[entry.pairName] = entry.sameProb
     }
-    const oneProb = this.computeQubitValuesFromEdgeAverages(sameProbValues)
     
     return {
-      oneProb,
+      // oneProb,
       pairSimilarities,
       algorithmSolution,
       benchmarkInfo: {
-        simulatedScore,
         hardwareScore,
         optimalPairCount: targetPairCount,
       },
     }
-  }
-
-  private computeQubitValuesFromEdgeAverages(sameProbData: Record<string, number>): number[] {
-    const oneProb: number[] = new Array(this.device.qubitCount).fill(0.5)
-    console.log("=== COMPUTING QUBIT VALUES FROM EDGE AVERAGES ===")
-
-    for (let qubitId = 0; qubitId < this.device.qubitCount; qubitId++) {
-      const edgeValues: number[] = []
-      const connectedPairs: string[] = []
-
-      for (const [pairName, [q1, q2]] of Object.entries(this.device.pairs)) {
-        if (q1 === qubitId || q2 === qubitId) {
-          const sameProb = sameProbData[pairName]
-          if (typeof sameProb === "number") {
-            edgeValues.push(sameProb)
-            connectedPairs.push(pairName)
-          }
-        }
-      }
-
-      if (edgeValues.length > 0) {
-        const average = edgeValues.reduce((sum, val) => sum + val, 0) / edgeValues.length
-        oneProb[qubitId] = average
-      } else {
-        oneProb[qubitId] = this.device.exampleValues[qubitId] || 0.5
-      }
-    }
-    return oneProb
   }
 
   private generateSimulatedBaseline(): {

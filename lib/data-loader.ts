@@ -270,6 +270,8 @@ export class HardwareDataLoader {
         })
         .filter((item) => item !== null)
 
+      console.log('data length: ', data.length);
+
       return data.length > 0 ? data : null
     } catch (error) {
       return null

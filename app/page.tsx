@@ -980,15 +980,9 @@ export default function QuantumCouplingVisualizer() {
               let strokeColor = "#6b7280"
               let strokeWidth = "2"
 
-              if (gameState.dataType === 'sameProbs' && gameState.isGameActive) {
-                // console.log("==================Hello==================");
-                const similarity = gameState.pairSimilarities[pairName] || 0
-                const invertedSimilarity = 1 - similarity
-                // Using an exponential scale for more dramatic thickness
+              const similarity = gameState.pairSimilarities[pairName] || 0
+              if (gameState.isGameActive && Object.keys(gameState.pairSimilarities).length > 0) {
                 strokeWidth = `${Math.max(1.5, 12 * Math.pow(similarity, 2))}`
-                // new data: invertedSimilarity, old data: similarity???? => Fixed because it was using abs.
-
-                // console.log("StrokeWidth: ", strokeWidth, "similarity: ", invertedSimilarity, pairName)
               } else {
                 strokeWidth = "4"
               }
@@ -1031,21 +1025,20 @@ export default function QuantumCouplingVisualizer() {
               
               let qubitFillColor = "#9ca3af";
 
-              if (gameState.dataType === 'oneProbs' && gameState.isGameActive && gameState.oneProb.length > 0) {
-                const qubitValue = gameState.oneProb[qubitId];
-                const qubitColour = qubitValue !== null ? Math.max(0, Math.min(1, qubitValue)) : 0;
-                
-                const R = Math.round(239 + (59 - 239) * qubitColour);
-                const B = Math.round(68 + (246 - 68) * qubitColour);
-                const G = Math.round(68 + (130 - 68) * qubitColour);
-                qubitFillColor = `rgb(${R},${G},${B})`;
-              } else if (gameState.dataType === 'oneProbs') {
-                const qubitValue = device.getQubitValue(qubitId);
-                const qubitColour = qubitValue !== null ? Math.max(0, Math.min(1, qubitValue)) : 0;
-                const R = Math.round(239 + (59 - 239) * qubitColour);
-                const B = Math.round(68 + (246 - 68) * qubitColour);
-                const G = Math.round(68 + (130 - 68) * qubitColour);
-                qubitFillColor = `rgb(${R},${G},${B})`;
+              if (gameState.isGameActive && gameState.oneProb.length > 0) {
+                const qubitValue = gameState.oneProb[qubitId]
+                const qubitColour = qubitValue !== null ? Math.max(0, Math.min(1, qubitValue)) : 0
+                const R = Math.round(239 + (59 - 239) * qubitColour)
+                const B = Math.round(68 + (246 - 68) * qubitColour)
+                const G = Math.round(68 + (130 - 68) * qubitColour)
+                qubitFillColor = `rgb(${R},${G},${B})`
+              } else {
+                const qubitValue = device.getQubitValue(qubitId)
+                const qubitColour = qubitValue !== null ? Math.max(0, Math.min(1, qubitValue)) : 0
+                const R = Math.round(239 + (59 - 239) * qubitColour)
+                const B = Math.round(68 + (246 - 68) * qubitColour)
+                const G = Math.round(68 + (130 - 68) * qubitColour)
+                qubitFillColor = `rgb(${R},${G},${B})`
               }
         
               return (
