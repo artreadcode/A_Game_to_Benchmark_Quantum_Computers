@@ -969,10 +969,17 @@ export default function QuantumCouplingVisualizer() {
 
               if (!pos1 || !pos2) return null
 
+              /*
               const x1 = (pos1[0] - minX) * scale + padding
               const y1 = (maxYActual - pos1[1]) * scale + padding
               const x2 = (pos2[0] - minX) * scale + padding
               const y2 = (maxYActual - pos2[1]) * scale + padding
+              */
+
+              const x1 = (pos1[0] - minX) * scale + padding
+              const y1 = (pos1[1] - minY) * scale + padding
+              const x2 = (pos2[0] - minX) * scale + padding
+              const y2 = (pos2[1] - minY) * scale + padding
 
               const isPairGuessed = gameState.guessedPairs.includes(pairName)
               const isPairCorrect = gameState.algorithmSolution.includes(pairName)
@@ -1025,6 +1032,11 @@ export default function QuantumCouplingVisualizer() {
             {Array.from({ length: device.qubitCount }, (_, i) => i).map((qubitId) => {
               const pos = device.getPosition(qubitId)
               if (!pos) return null
+
+              /*
+              const x = (pos[0] - minX) * scale + padding
+              const y = (maxYActual - pos[1]) * scale + padding
+              */
 
               const x = (pos[0] - minX) * scale + padding
               const y = (maxYActual - pos[1]) * scale + padding
