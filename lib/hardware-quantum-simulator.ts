@@ -22,6 +22,7 @@ export class HardwareQuantumSimulator {
   private hardwareData: HardwareDataSet | null = null
   private currentRound = 0
   private useRealHardware = false
+  private gameSampleIndex = 0; // To store the selected game index
 
   constructor(device: QuantumDevice) {
     this.device = device
@@ -42,6 +43,10 @@ export class HardwareQuantumSimulator {
       }
 
       this.hardwareData = data;
+      
+      // Randomly select which game sample to play from the file
+      const numSamples = this.hardwareData.gates?.[0]?.length || 1;
+      this.gameSampleIndex = Math.floor(Math.random() * numSamples);
 
       // console.log(`Loaded hardware data: ${this.hardwareData.displayName} (${this.hardwareData.fileType})`)
 
@@ -57,11 +62,11 @@ export class HardwareQuantumSimulator {
           }
         }
       }
-      return true
+      return true;
     }
 
-    this.hardwareData = null
-    return true
+    this.hardwareData = null;
+    return true;
   }
 
   private getDeviceKey(): string {
@@ -81,9 +86,9 @@ export class HardwareQuantumSimulator {
 
   generateNewPuzzle(): HardwarePuzzleResult {
     if (this.useRealHardware && this.hardwareData) {
-      return this.generateHardwarePuzzle()
+      return this.generateHardwarePuzzle();
     } else {
-      return this.generateSimulatedPuzzle()
+      return this.generateSimulatedPuzzle();
     }
   }
 
@@ -92,38 +97,59 @@ export class HardwareQuantumSimulator {
       throw new Error("No hardware data available");
     }
 
-    // Always process oneProbs for node colors.
-    const processedOneProb = this.processOneProbsData();
+    const gameSampleIndex = 0; // Always use the first game sample from the files.
+    let oneProb: number[] = [];
     let pairSimilarities: Record<string, number> = {};
     let algorithmSolution: string[] = [];
-    let benchmarkInfo: any = undefined;
 
-    // If the primary data source is sameProbs, use it for edges and the algorithm.
-    // Otherwise, calculate similarities from the oneProbs data.
-    if (this.hardwareData.fileType === "sameProbs" && this.hardwareData.sameProbs) {
-      const sameProbsResult = this.processSameProbsSimple();
-      pairSimilarities = sameProbsResult.pairSimilarities;
-      algorithmSolution = sameProbsResult.algorithmSolution;
-      benchmarkInfo = sameProbsResult.benchmarkInfo;
-    } else {
-      pairSimilarities = MatchingAlgorithm.calculateAllSimilarities(this.device.pairs, processedOneProb);
-      algorithmSolution = MatchingAlgorithm.getDisjointPairs(this.device.pairs, processedOneProb, {});
+    // --- CORRECTED INDEXING LOGIC ---
+
+    // For oneProbs, we must go three levels deep: [game][round][run]
+    const oneProbGameData = this.hardwareData.oneProbs?.[gameSampleIndex];
+    if (oneProbGameData && oneProbGameData[this.currentRound]) {
+      const oneProbRoundData = oneProbGameData[this.currentRound];
+      // Check if it's an array of arrays (a list of runs) and select the first run.
+      if (Array.isArray(oneProbRoundData) && Array.isArray(oneProbRoundData[0])) {
+        oneProb = oneProbRoundData[0];
+        console.log(oneProb);
+      } else {
+        // Handle cases where there is no "run" nesting
+        oneProb = oneProbRoundData as number[];
+        console.log('x: ', oneProb);
+      }
     }
 
-    const matchingPairs = Object.keys(pairSimilarities);
+    // For sameProbs, we go two levels deep: [game][round]
+    const sameProbGameData = this.hardwareData.sameProbs?.[gameSampleIndex];
+    if (sameProbGameData && sameProbGameData[this.currentRound]) {
+        pairSimilarities = sameProbGameData[this.currentRound];
+        console.log(pairSimilarities);
+    }
+    
+    // For gates, we go two levels deep: [game][round]
+    const gatesGameData = this.hardwareData.gates?.[gameSampleIndex];
+    if (gatesGameData && gatesGameData[this.currentRound]) {
+      algorithmSolution = Object.keys(gatesGameData[this.currentRound]).map(key => key.trim());
+      console.log(algorithmSolution);
+    } else {
+      console.warn(`No gates data found for round ${this.currentRound}.`);
+      // algorithmSolution = [];
+    }
+
+    const totalRounds = gatesGameData?.length || 8;
 
     return {
-      oneProb: processedOneProb, // Always uses the correct oneProb data.
+      oneProb,
       algorithmSolution,
-      matchingPairs,
-      pairSimilarities, // Based on sameProbs if available, otherwise calculated.
+      matchingPairs: Object.keys(pairSimilarities),
+      pairSimilarities,
       isRealHardware: true,
       roundNumber: this.currentRound++,
-      totalRounds: 8,
-      dataType: this.hardwareData.fileType,
-      benchmarkInfo,
+      totalRounds: totalRounds,
+      dataType: this.hardwareData.fileType || "oneProbs",
     };
   }
+
 
   private processSameProbsSimple(): {
     oneProb: number[]
@@ -150,7 +176,6 @@ export class HardwareQuantumSimulator {
     const expectedPairCount = Math.floor(this.device.qubitCount / 2);
     // const expectedPairCount = MatchingAlgorithm.getDisjointPairs(this.device.pairs, [], {}).length
     console.log(`Expected pair count based on device topology: ${expectedPairCount}`)
-    // --- END: THE FIX ---
 
     const pairSimilarities: Record<string, number> = {}
     const correlationScores: Array<{ pairName: string; score: number; sameProb: number }> = []
@@ -175,12 +200,6 @@ export class HardwareQuantumSimulator {
     }
 
     correlationScores.sort((a, b) => b.score - a.score)
-    /*
-    console.log("=== CORRELATION RANKING ===")
-    correlationScores.forEach((entry, index) => {
-      console.log(`${index + 1}. ${entry.pairName}: sameProb=${entry.sameProb.toFixed(3)}, correlation=${entry.score.toFixed(3)}`)
-    })
-    */
     
     const targetPairCount = Math.max(2, Math.min(expectedPairCount, correlationScores.length))
     console.log(`Target pair count: ${targetPairCount}`)
@@ -193,7 +212,6 @@ export class HardwareQuantumSimulator {
     // const simulatedScore = 1.0 
 
     console.log(`Hardware score: ${hardwareScore.toFixed(3)}`)
-    // console.log(`Simulated score: ${simulatedScore.toFixed(3)}`)
 
     const sameProbValues: Record<string, number> = {}
     for (const entry of correlationScores) {

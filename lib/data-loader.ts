@@ -16,6 +16,7 @@ export interface DataFileInfo {
 export interface HardwareDataSet {
   oneProbs?: number[][]
   sameProbs?: Record<string, number>[]
+  gates?: Record<string, number>[] // To hold the answers
   device: string
   shots: number
   isSimulated: boolean
@@ -48,10 +49,16 @@ export class HardwareDataLoader {
         return null
       }
 
+      const gatesFileName = selectedFile.fileName.replace(/^(one|same)Probs/, "gates");
+      // console.log('It should find: ', gatesFileName);
+      const gatesFileUrl = `${baseUrl}/${gatesFileName}`;
+      const gatesData = await this.loadDataFile(gatesFileUrl);
+      // console.log(gatesData);
+
       let normalizedData = rawData;
       if (rawData.length > 0 && !Array.isArray(rawData[0])) {
         normalizedData = [rawData];
-        console.log("Old data format detected. Normalizing data structure.");
+        // console.log("Old data format detected. Normalizing data structure.");
       }
 
       const dataSet: HardwareDataSet = {
@@ -64,6 +71,7 @@ export class HardwareDataLoader {
         displayName: selectedFile.displayName,
         fileType: selectedFile.fileType,
         sampleData: selectedFile.sampleData,
+        gates: gatesData ?? undefined, // assign the loaded gates_.txt here.
       }
 
       if (selectedFile.fileType === "oneProbs") {
@@ -201,10 +209,10 @@ export class HardwareDataLoader {
         .slice(0, 3)
         .map((x) => (x * 100).toFixed(0) + "%")
         .join(", ")
-      parts.push(`[${preview}...]`)
+      // parts.push(`[${preview}...]`)
     } else if (fileType === "sameProbs" && sampleData.sameProbs) {
-      const keys = Object.keys(sampleData.sameProbs).slice(0, 3).join(", ")
-      parts.push(`Pairs: ${keys}...`)
+      // const keys = Object.keys(sampleData.sameProbs).slice(0, 3).join(", ")
+      // parts.push(`Pairs: ${keys}...`)
     }
 
     return parts.join(" | ")
