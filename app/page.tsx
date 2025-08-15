@@ -783,7 +783,7 @@ const deviceData = {
 }
 
 export default function QuantumCouplingVisualizer() {
-  const [selectedDevice, setSelectedDevice] = useState("ibmqx4")
+  const [selectedDevice, setSelectedDevice] = useState("ibmqx5")
   const [gameManager] = useState(() => new GameManager())
   const [gameState, setGameState] = useState(gameManager.getState())
   const [zoomLevel, setZoomLevel] = useState(1.0)
@@ -797,7 +797,7 @@ export default function QuantumCouplingVisualizer() {
     }>
   >([])
 
-  const [useRealHardware, setUseRealHardware] = useState(false)
+  const [useRealHardware, setUseRealHardware] = useState(true)
   const [dataAvailable, setDataAvailable] = useState<{
     realData: boolean
     simulatedData: boolean
@@ -827,7 +827,15 @@ export default function QuantumCouplingVisualizer() {
       })
 
       if (availability.availableFiles && availability.availableFiles.length > 0) {
-        setSelectedDataFile(availability.availableFiles[0])
+
+        const defaultFile = availability.availableFiles.find(file => 
+          file.fileType === 'oneProbs' &&
+          file.metadata.move === 'C' &&
+          file.metadata.shots === 100 &&
+          file.metadata.simulated === true
+        );
+
+        setSelectedDataFile(defaultFile || availability.availableFiles[0]);
       }
     }
 
