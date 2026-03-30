@@ -1094,7 +1094,7 @@ export default function QuantumCouplingVisualizer() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Cpu className="h-6 w-6" />
-              Quantum Awesomeness - Benchmarking quantum computers with puzzle game
+              Mirror Quantum Awesomeness - Quantum Device Benchmarking with Puzzle Game!
             </CardTitle>
           </CardHeader>
           <CardContent>
